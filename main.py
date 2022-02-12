@@ -58,19 +58,25 @@ search_params = {
 response = requests.get(search_api_server, params=search_params)
 
 json_response = response.json()
-# Получаем первую найденную организацию.
-organization = json_response["features"][0]
-# Название организации.
-org_name = organization["properties"]["CompanyMetaData"]["name"]
-org_hours = organization["properties"]["CompanyMetaData"]["Hours"]
-# Адрес организации.
-org_address = organization["properties"]["CompanyMetaData"]["address"]
+data = []
+for i in range(min(10, len(json_response["features"]))):
+    organization = json_response["features"][i]
+    # Название организации.
+    org_name = organization["properties"]["CompanyMetaData"]["name"]
+    org_hours = organization["properties"]["CompanyMetaData"].get("Hours", False)
+    org_address = organization["properties"]["CompanyMetaData"]["address"]
 
-# Получаем координаты ответа.
-point = organization["geometry"]["coordinates"]
-org_point = "{0},{1}".format(point[0], point[1])
-delta = "0.007"
-
+    # Получаем координаты ответа.
+    point = organization["geometry"]["coordinates"]
+    org_point = "{0},{1}".format(point[0], point[1])
+    if org_hours:
+        if org_hours["Availabilities"][0].get("TwentyFourHours", False):
+            data.append(("pm2gnl", org_point))
+        else:
+            data.append(("org", org_point))
+    else:
+        data.append(("pm2grl", org_point))
+    # Адрес организации.
 # Собираем параметры для запроса к StaticMapsAPI:
 map_params = {
     # позиционируем карту центром на наш исходный адрес
@@ -78,15 +84,12 @@ map_params = {
     # "spn": ",".join([delta, delta]),
     "l": "map",
     # добавим точку, чтобы указать найденную аптеку
-    "pt": f"{org_point},pm2al~{address_ll},org"
+    "pt": f"{'~'.join([','.join((i[1], i[0])) for i in data])}~{address_ll}"
 }
 
 map_api_server = "http://static-maps.yandex.ru/1.x/"
 # ... и выполняем запрос
 response = requests.get(map_api_server, params=map_params)
-print("Адрес", org_address)
-print("Название", org_name)
-print("Время", org_hours["text"])
-
+print(response.url)
 Image.open(BytesIO(
     response.content)).show()
